@@ -1,0 +1,581 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>进程守护器 - 日志查看器</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: #f5f5f5;
+            color: #333;
+        }
+        
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 20px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        
+        .header h1 {
+            font-size: 24px;
+            margin-bottom: 5px;
+        }
+        
+        .header p {
+            opacity: 0.9;
+            font-size: 14px;
+        }
+        
+        .file-area {
+            margin: 20px;
+            padding: 30px;
+            background: white;
+            border-radius: 10px;
+            text-align: center;
+            border: 2px dashed #ccc;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+        
+        .file-area:hover {
+            border-color: #667eea;
+            background: #f8f9ff;
+        }
+        
+        .file-area.drag-over {
+            border-color: #667eea;
+            background: #e8ebff;
+        }
+        
+        .file-info {
+            margin-top: 10px;
+            font-size: 12px;
+            color: #666;
+        }
+        
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+            padding: 20px;
+        }
+        
+        .stat-card {
+            background: white;
+            border-radius: 10px;
+            padding: 20px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+        }
+        
+        .stat-card h3 {
+            color: #667eea;
+            margin-bottom: 15px;
+            font-size: 16px;
+        }
+        
+        .stat-number {
+            font-size: 32px;
+            font-weight: bold;
+            color: #333;
+        }
+        
+        .tabs {
+            display: flex;
+            background: white;
+            padding: 0 20px;
+            border-bottom: 2px solid #e0e0e0;
+            flex-wrap: wrap;
+        }
+        
+        .tab {
+            padding: 12px 24px;
+            cursor: pointer;
+            border: none;
+            background: none;
+            font-size: 14px;
+            transition: all 0.3s;
+        }
+        
+        .tab:hover {
+            background: #f5f5f5;
+        }
+        
+        .tab.active {
+            color: #667eea;
+            border-bottom: 2px solid #667eea;
+            margin-bottom: -2px;
+        }
+        
+        .tab-content {
+            display: none;
+            padding: 20px;
+        }
+        
+        .tab-content.active {
+            display: block;
+        }
+        
+        .search-bar {
+            margin-bottom: 20px;
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+        
+        .search-bar input {
+            flex: 1;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            font-size: 14px;
+            min-width: 150px;
+        }
+        
+        .search-bar button {
+            padding: 10px 20px;
+            background: #667eea;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            transition: background 0.3s;
+        }
+        
+        .search-bar button:hover {
+            background: #5a67d8;
+        }
+        
+        .log-table-container {
+            overflow-x: auto;
+        }
+        
+        .log-table {
+            width: 100%;
+            border-collapse: collapse;
+            background: white;
+            border-radius: 10px;
+            overflow: hidden;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+            font-size: 14px;
+        }
+        
+        .log-table th {
+            background: #f8f9fa;
+            padding: 12px;
+            text-align: left;
+            font-weight: 600;
+            color: #555;
+            border-bottom: 2px solid #e0e0e0;
+            white-space: nowrap;
+        }
+        
+        .log-table td {
+            padding: 10px 12px;
+            border-bottom: 1px solid #f0f0f0;
+        }
+        
+        .log-table tr:hover {
+            background: #f8f9fa;
+        }
+        
+        .warning-row {
+            background: #fff3cd;
+        }
+        
+        .error-row {
+            background: #f8d7da;
+        }
+        
+        .action-badge {
+            display: inline-block;
+            padding: 3px 8px;
+            border-radius: 3px;
+            font-size: 11px;
+            font-weight: 600;
+        }
+        
+        .action-badge.kill {
+            background: #dc3545;
+            color: white;
+        }
+        
+        .action-badge.system {
+            background: #28a745;
+            color: white;
+        }
+        
+        .stat-bar-item {
+            margin-bottom: 15px;
+        }
+        
+        .stat-bar-label {
+            font-size: 12px;
+            margin-bottom: 5px;
+            color: #666;
+        }
+        
+        .stat-bar-bg {
+            background: #e0e0e0;
+            border-radius: 10px;
+            overflow: hidden;
+            height: 30px;
+        }
+        
+        .stat-bar-fill {
+            background: linear-gradient(90deg, #667eea, #764ba2);
+            height: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: flex-end;
+            padding-right: 10px;
+            color: white;
+            font-size: 12px;
+            font-weight: bold;
+            transition: width 0.3s;
+        }
+        
+        .empty-state {
+            text-align: center;
+            padding: 40px;
+            color: #999;
+        }
+        
+        @media (max-width: 768px) {
+            .log-table {
+                font-size: 12px;
+            }
+            
+            .log-table td, .log-table th {
+                padding: 8px;
+            }
+            
+            .stats-grid {
+                grid-template-columns: 1fr;
+            }
+            
+            .tab {
+                padding: 8px 16px;
+                font-size: 12px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>🛡️ 进程守护器 - 日志查看器</h1>
+        <p>点击或拖拽 log.json 文件到页面查看监控日志</p>
+    </div>
+    
+    <div class="file-area" id="file-area" onclick="document.getElementById('file-input').click()">
+        📂 点击选择 log.json 文件<br>
+        <small style="color: #999;">或直接拖拽文件到此处</small>
+        <div class="file-info" id="file-info">未加载文件</div>
+    </div>
+    
+    <input type="file" id="file-input" accept=".json" style="display: none;">
+    
+    <div id="main-content" style="display: none;">
+        <div class="stats-grid" id="stats-grid">
+            <div class="stat-card">
+                <h3>📊 总日志数</h3>
+                <div class="stat-number" id="total-logs">-</div>
+            </div>
+            <div class="stat-card">
+                <h3>🔪 总杀进程次数</h3>
+                <div class="stat-number" id="total-kills">-</div>
+            </div>
+            <div class="stat-card">
+                <h3>🔄 最后加载</h3>
+                <div class="stat-number" style="font-size: 14px;" id="last-update">-</div>
+            </div>
+        </div>
+        
+        <div class="tabs">
+            <button class="tab active" onclick="showTab('logs')">📋 日志列表</button>
+            <button class="tab" onclick="showTab('stats')">📈 进程统计</button>
+            <button class="tab" onclick="showTab('daily')">📅 每日统计</button>
+        </div>
+        
+        <div id="logs-tab" class="tab-content active">
+            <div class="search-bar">
+                <input type="text" id="search-input" placeholder="搜索进程名、原因或消息..." onkeyup="if(event.key==='Enter') searchLogs()">
+                <button onclick="searchLogs()">🔍 搜索</button>
+                <button onclick="resetLogs()">🔄 重置</button>
+            </div>
+            <div class="log-table-container">
+                <table class="log-table">
+                    <thead>
+                        <tr>
+                            <th>时间</th>
+                            <th>类型</th>
+                            <th>进程名</th>
+                            <th>PID</th>
+                            <th>原因</th>
+                            <th>消息</th>
+                        </tr>
+                    </thead>
+                    <tbody id="log-body">
+                        <tr><td colspan="6" class="empty-state">加载日志文件中...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        
+        <div id="stats-tab" class="tab-content">
+            <div class="stat-card">
+                <h3>🏆 被终止最多的进程 (Top 10)</h3>
+                <div id="process-stats" class="stat-bars">
+                    <p>加载中...</p>
+                </div>
+            </div>
+        </div>
+        
+        <div id="daily-tab" class="tab-content">
+            <div class="stat-card">
+                <h3>📆 每日杀进程统计</h3>
+                <div id="daily-stats" class="stat-bars">
+                    <p>加载中...</p>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        let fullLogs = [];
+        let currentDisplayLogs = [];
+        
+        // 文件选择
+        document.getElementById('file-input').addEventListener('change', handleFileSelect);
+        
+        // 拖拽上传
+        const fileArea = document.getElementById('file-area');
+        
+        fileArea.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            fileArea.classList.add('drag-over');
+        });
+        
+        fileArea.addEventListener('dragleave', (e) => {
+            e.preventDefault();
+            fileArea.classList.remove('drag-over');
+        });
+        
+        fileArea.addEventListener('drop', (e) => {
+            e.preventDefault();
+            fileArea.classList.remove('drag-over');
+            const files = e.dataTransfer.files;
+            if (files.length > 0) {
+                processFile(files[0]);
+            }
+        });
+        
+        function handleFileSelect(e) {
+            const files = e.target.files;
+            if (files.length > 0) {
+                processFile(files[0]);
+            }
+        }
+        
+        function processFile(file) {
+            if (!file.name.endsWith('.json')) {
+                alert('请选择 .json 格式的日志文件');
+                return;
+            }
+            
+            document.getElementById('file-info').innerHTML = `📄 加载中: ${file.name}`;
+            
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                try {
+                    const data = JSON.parse(e.target.result);
+                    if (Array.isArray(data)) {
+                        fullLogs = data;
+                        currentDisplayLogs = [...fullLogs];
+                        updateAllStats();
+                        document.getElementById('main-content').style.display = 'block';
+                        document.getElementById('file-info').innerHTML = `✅ 已加载: ${file.name} (${fullLogs.length} 条日志)`;
+                    } else {
+                        alert('日志格式错误：应该是数组格式');
+                    }
+                } catch (err) {
+                    alert('解析JSON失败: ' + err.message);
+                }
+            };
+            reader.onerror = function() {
+                alert('读取文件失败');
+            };
+            reader.readAsText(file, 'UTF-8');
+        }
+        
+        function updateAllStats() {
+            // 计算统计
+            const totalKills = fullLogs.filter(log => log.action === 'kill').length;
+            
+            // 进程统计
+            const processCounts = {};
+            fullLogs.forEach(log => {
+                if (log.action === 'kill' && log.process_name) {
+                    const name = log.process_name;
+                    processCounts[name] = (processCounts[name] || 0) + 1;
+                }
+            });
+            const topProcesses = Object.entries(processCounts)
+                .sort((a, b) => b[1] - a[1])
+                .slice(0, 10)
+                .map(([name, count]) => ({name, count}));
+            
+            // 每日统计
+            const dailyCounts = {};
+            fullLogs.forEach(log => {
+                if (log.action === 'kill' && log.timestamp) {
+                    const date = log.timestamp.split(' ')[0];
+                    if (date) dailyCounts[date] = (dailyCounts[date] || 0) + 1;
+                }
+            });
+            const dailyStats = Object.entries(dailyCounts)
+                .sort((a, b) => a[0].localeCompare(b[0]))
+                .map(([date, count]) => ({date, count}));
+            
+            // 更新UI
+            document.getElementById('total-logs').textContent = fullLogs.length;
+            document.getElementById('total-kills').textContent = totalKills;
+            document.getElementById('last-update').textContent = new Date().toLocaleString();
+            
+            updateProcessStats(topProcesses);
+            updateDailyStats(dailyStats);
+            updateLogTable(fullLogs.slice().reverse().slice(0, 200));
+        }
+        
+        function updateProcessStats(processes) {
+            const container = document.getElementById('process-stats');
+            if (processes.length === 0) {
+                container.innerHTML = '<p>暂无数据</p>';
+                return;
+            }
+            
+            const maxCount = processes[0].count;
+            container.innerHTML = processes.map(proc => {
+                const percentage = maxCount > 0 ? (proc.count / maxCount * 100) : 0;
+                return `
+                    <div class="stat-bar-item">
+                        <div class="stat-bar-label">${escapeHtml(proc.name)}</div>
+                        <div class="stat-bar-bg">
+                            <div class="stat-bar-fill" style="width: ${percentage}%">${proc.count}</div>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+        
+        function updateDailyStats(dailyStats) {
+            const container = document.getElementById('daily-stats');
+            const last30Days = dailyStats.slice(-30);
+            
+            if (last30Days.length === 0) {
+                container.innerHTML = '<p>暂无数据</p>';
+                return;
+            }
+            
+            const maxCount = Math.max(...last30Days.map(d => d.count), 1);
+            container.innerHTML = last30Days.map(day => {
+                const percentage = (day.count / maxCount * 100);
+                return `
+                    <div class="stat-bar-item">
+                        <div class="stat-bar-label">${day.date}</div>
+                        <div class="stat-bar-bg">
+                            <div class="stat-bar-fill" style="width: ${percentage}%">${day.count}</div>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+        
+        function updateLogTable(log) {
+            cont tbody = document.getElementById('log-body');
+            if (!log || log.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="6" class="empty-state">暂无日志</td></tr>';
+                return;
+            }
+            
+            tbody.innerHTML = logs.slice(0, 200).map(log => {
+                cont action = log.action || 'system';
+                let rowCla = '';
+                if (log.level === 'warning') rowClass = 'warning-row';
+                if (log.level === 'error') rowClass = 'error-row';
+                
+                cont proceName = log.process_name || '-';
+                cont pid = log.pid || '-';
+                cont reaon = log.reason || '-';
+                let meage = log.message || '';
+                
+                if (action === 'kill') {
+                    meage = `结束进程: ${processName} (PID: ${pid}) - ${reason}`;
+                }
+                
+                return `
+                    <tr cla="${rowClass}">
+                        <td>${ecapeHtml(log.timetamp || '')}</td>
+                        <td><pan cla="action-badge ${action}">${escapeHtml(action)}</span></td>
+                        <td>${ecapeHtml(proceName)}</td>
+                        <td>${ecapeHtml(String(pid))}</td>
+                        <td>${ecapeHtml(reaon)}</td>
+                        <td>${ecapeHtml(meage)}</td>
+                    </tr>
+                `;
+            }).join('');
+        }
+        
+        function earchLog() {
+            cont keyword = document.getElementById('search-input').value.toLowerCase().trim();
+            if (!keyword) {
+                reetLog();
+                return;
+            }
+            
+            cont filtered = fullLogs.filter(log => {
+                return (log.proce_name && log.proce_name.toLowerCae().include(keyword)) ||
+                       (log.reaon && log.reaon.toLowerCae().include(keyword)) ||
+                       (log.meage && log.meage.toLowerCae().include(keyword));
+            });
+            
+            updateLogTable(filtered.lice().revere());
+        }
+        
+        function reetLog() {
+            document.getElementById('earch-input').value = '';
+            updateLogTable(fullLog.lice().revere().lice(0, 200));
+        }
+        
+        function howTab(tabName) {
+            document.querySelectorAll('.tab-content').forEach(tab => {
+                tab.claLit.remove('active');
+            });
+            
+            document.querySelectorAll('.tab').forEach(btn => {
+                btn.claLit.remove('active');
+            });
+            
+            document.getElementById(tabName + '-tab').claLit.add('active');
+            event.target.claLit.add('active');
+        }
+        
+        function ecapeHtml(tr) {
+            if (!tr) return '';
+            return tr.replace(/[&<>]/g, function(m) {
+                if (m === '&') return '&amp;';
+                if (m === '<') return '&lt;';
+                if (m === '>') return '&gt;';
+                return m;
+            });
+        }
+    </cript>
+</body>
+</html>
